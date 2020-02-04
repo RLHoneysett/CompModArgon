@@ -30,8 +30,7 @@ def image_closest_to_particle(particle1, particle2, l):
     Computes image of the particle2 closest to particle1.
     
     :param particle1: a Particle3D instance, the co-ordinates of which can be found using the .position function from the Particle3D class.
-    :param particle2: the data stored on the second particle, the co-ordinates of which can be
-    found using the .position function from the Particle3D class.
+    :param particle2: another Particle3D instance, the co-ordinates of which can be found using the .position function from the Particle3D class.
     :param l: length of cube
     :return: coordinates of particle's image closest to the other particle, stored as NumPy array [[x1''. x2''. x3''.]], -l/2 < xi'' < l/2.
     """
