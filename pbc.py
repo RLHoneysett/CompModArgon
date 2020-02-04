@@ -16,8 +16,7 @@ def image_in_cube(particle, l):
     """
     Computes image of the particle within the cube of given length l.
     
-    :param particle: the data stored on a particle from the Particle3D class, the co-ordinates of
-    which can be retrieved by the .position function.
+    :param particle: a Particle3D isntance, the co-ordinates of which can be retrieved by the .position function.
     :param l: length of cube
     :updates the position of the Particle3D object so that it is within the cube
     """
@@ -30,8 +29,7 @@ def image_closest_to_particle(particle1, particle2, l):
     """ 
     Computes image of the particle2 closest to particle1.
     
-    :param particle1: the data stored on the first particle, the co-ordinates of which can be
-    found using the .position function from the Particle3D class.
+    :param particle1: a Particle3D instance, the co-ordinates of which can be found using the .position function from the Particle3D class.
     :param particle2: the data stored on the second particle, the co-ordinates of which can be
     found using the .position function from the Particle3D class.
     :param l: length of cube
