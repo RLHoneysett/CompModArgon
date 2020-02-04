@@ -19,7 +19,7 @@ def image_in_cube(particle, l):
     :param particle: the data stored on a particle from the Particle3D class, the co-ordinates of
     which can be retrieved by the .position function.
     :param l: length of cube
-    :return: coordinates of particle's image inside cube, stored as NumPy array [[x1'. x2'. x3'.]], 0 < xi' < l.
+    :updates the position of the Particle3D object so that it is within the cube
     """
     # Using the modulo operator ensures that this works for negative coordinates as well:
     image_in_cube = np.mod(particle.position, l)
@@ -28,7 +28,7 @@ def image_in_cube(particle, l):
        
 def image_closest_to_particle(particle1, particle2, l):   
     """ 
-    Computes image of the particle2 closest to particle 1.
+    Computes image of the particle2 closest to particle1.
     
     :param particle1: the data stored on the first particle, the co-ordinates of which can be
     found using the .position function from the Particle3D class.
@@ -42,16 +42,3 @@ def image_closest_to_particle(particle1, particle2, l):
     image = np.mod((particle2.position - particle1.position)+l/2, l) - l/2
     
     return image
-
-"""
-Note: if the particle's image in the cube has a coordinate of exactly xi = l/2, the above method will return xi = -l/2 for the 'closest' coordinate. 
-      However, there will be at least 2 images which are equally close to the origin (and 8 if image_in_cube = [[l/2. l/2. l/2.]]. 
-      Ideally, the function should return the positive position, xi=l/2, since this is within the original cube.
-      This is not achieved using the above (very efficient) method. 
-      Therefore, I include a second, longer method below, which does this (image_closest_to_origin_long_way()).
-      However, the first function (image_closest_to_origin()) is used in the main(), for two reasons:
-          i) It is more efficient.
-          ii) In real situations, the particle will never be exactly in at xi = l/2, so this situation does not arise.
-"""
-    
-    
