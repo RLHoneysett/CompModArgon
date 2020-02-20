@@ -43,17 +43,14 @@ import numpy as np
 import matplotlib.pyplot as pyplot
 from Particle3D import Particle3D
 
-def force_morse(particle1, particle2, r_e, D_e, alpha):
+def force_lj(particle1, particle2):
     """
-    Method to return the force on particle 1 due to the interaction with particle 2 in a Morse potential.
+    Method to return the force on particle 1 due to the interaction with particle 2 in a LJ potential.
     Force is given by:
-    F1(r1, r2) = 2 * alpha * D_e {1 - exp [-apha(r12 - r_e)]} * exp[-alpha(r12 - r_e)] * (r1-r2)/r12
+    F1(r1, r2) = 48((1/r12^14)-(1/(2*r12^8)))(r1-r2)
 
     :param particle1: Particle3D instance
     :param particle2: Particle3D instance
-    :param r_e: parameter r_e from Morse potential
-    :param D_e: parameter D_e from Morse potential
-    :param alpha: parameter alpha from Morse potential
     :return: force acting on particle 1 as NumPy array
     """
     # compute particle separation
@@ -62,7 +59,7 @@ def force_morse(particle1, particle2, r_e, D_e, alpha):
     direction = (1/r12)*(particle2.position - particle1.position)
     
     # compute the magnitude of the force and multiply by the normalised direction vector
-    force = 2 * alpha * D_e * (1 - np.exp(-alpha*(r12 - r_e))) * np.exp(-alpha*(r12 - r_e)) * direction
+    force = 48 * (1/(r12**14)-1/(2*r12**8)) * direction
     
     return force
 
@@ -205,4 +202,3 @@ def main():
 # Execute main method, but only when directly invoked
 if __name__ == "__main__":
     main()
-
