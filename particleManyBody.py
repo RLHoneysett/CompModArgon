@@ -64,22 +64,19 @@ def force_lj(particle1, particle2):
     return force
 
 
-def pot_energy_morse(particle1, particle2, r_e, D_e, alpha):
+def pot_energy_lj(particle1, particle2):
     """
-    Method to return potential energy of two particles interacting via the Morse potential.
-    U(r1, r2) = D_e {(1 - exp[-alpha(r12 - r_e)])^2 - 1}
+    Method to return potential energy of two particles interacting via the LJ potential.
+    U(r1, r2) = 4 * (1/(r12^12) - 1/(r^6))
 
     :param particle1: Particle3D instance
     :param particle2: Particle3D instance
-    :param r_e: parameter r_e from Morse potential
-    :param D_e: parameter D_e from Morse potential
-    :param alpha: parameter alpha from Morse potential
     :return: potential energy of the particles as float
     """
     # compute the particle separation
     r12 = Particle3D.particle_separation(particle1, particle2)
     # Use this in formula for potential
-    potential = D_e * ((1 - np.exp(-alpha*(r12 - r_e)))**2 - 1)
+    potential = 4 * (1/(r12**12) - 1/(r12**6))
     
     return potential
 
