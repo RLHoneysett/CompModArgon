@@ -1,6 +1,5 @@
 """
 CMod Project B: auxiliary MD methods
-hello testing!
 """
 
 import random
