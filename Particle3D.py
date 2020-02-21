@@ -7,7 +7,8 @@
     - name(string) - label of particle
     - position(NumPy array) - position as 3D coord (x1, x2, x3) 
     - velocity(NumPy array) - velocity vector (v1, v2, v3) 
-    - mass(float) - particle mass
+    - mass(float) - particle mass. In reduced units this is always 1 and is therefore
+                    not required as an argument in the __init__() method.
 
     Methods:
     - formatted output
@@ -24,7 +25,7 @@ import numpy as np
 
 class Particle3D(object):
 
-    def __init__(self, name, position, velocity, mass):
+    def __init__(self, name, position, velocity):
         """
         Initialise a Particle3D instance
 
@@ -36,7 +37,7 @@ class Particle3D(object):
         self.name = name
         self.position = position
         self.velocity = velocity
-        self.mass = mass
+        self.mass = 1
 
     def __str__(self):
         """
