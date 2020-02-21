@@ -1,53 +1,72 @@
+# -*- coding: utf-8 -*-
 """
-CMod Ex2: 3D velocity Verlet time integration of a two particles interacting via 
-the Morse Potential.
+CMod Project B: 3D velocity Verlet time integration of N particles interacting via 
+the Lennard-Jones (LJ) Potential.
 
-Produces plots of the relative positions of the particles and the total energy, 
-both as function of time. Also saves these to two separate files: 
-    1) time and total energy
-    2) time and particle separation
+Produces a trajectory file, with which the particles’trajectories can be visualised 
+using a molecular visualisation program, VMD (Visual Molecular Dynamics).
+Writes the following to a file at regular time intervals:
+    1) the system’s total, kinetic and potential energies. 
+    2) the particles’ mean square displacement (MSD).
+    3) the particles’ radial distribution function (RDF). This will also be visualised as a histogram.
     
-The potential energy of the two particles in the potential is:
-    U(r1, r2) = D_e {(1 - exp[-alpha(r12 - r_e)])^2 - 1}
+The potential energy of the two particles in the LJ potential is:
+    U(r1, r2) = 4[1/(r12^12) - 1/(r12^6)]
 where:
-    * r1 and r2 are the positions of the two particles (vectors)
     * r12 = abs(r2 - r1) (scalar)
-    * r_e is the equilibrium bond distance (scalar)
-    * D_e is the well depth (scalar)
-    * alpha is a parameter related to the force constant and D_e (scalar). 
-      Describes the curvature of the potential minimum.
+    * r1 and r2 are the positions of the two particles (vectors)
       
 The force on particle 1 (vector) is:
-    F1(r1, r2) = 2 * alpha * D_e {1 - exp [-apha(r12 - r_e)]} * exp[-alpha(r12 - r_e)] * (r1-r2)/r12
+    F1(r1, r2) = 48[1/(r12^14)-1/(2*r12^8)](r1-r2)
 The force on particle 2 (vector) is:
     F2(r1, r2) = -F1(r1, r2)
     
-The initial conditions for the particles are read from a user-defined input file of the format: 
-    <label> <x pos> <y pos> <z pos> <x vel> <y vel> <z vel> <mass> 
+The program will require an input file. This will contain the following, where relevant in
+reduced units:
+    * number of particles
+    * number of simulation steps
+    * timestep
+    * temperature
+    * particle density
+    * LJ cut-off distance
+The format will be:
+    <no. particles> <no. steps> <timestep> <temp> <density> <LJ cut-off> 
     
-The parameters of the Morse Potential specific to a particlular element are read from a user-defined
-file of the format:    
-    <D_e> <r_e> <alpha>
+The output trajectory file will have the format:
     
-The units used will be eV, angstroms and a.m.u for energy, length and mass respectively.
-The methods for calculating the force and potential take the the parameters 
-r_e, D_e and alpha as arguments.
+<number of points to plot>
+<title line (in the example below it will give the timestep number)>
+<particle label> <x coordinate> <y-coordinate> <z coordinate>
+The final line is repeated N times for N particles. 
 
-Author: Damaris Tan
-Student number: s1645055
-Version: 16/11/19
+The ouput files containing the equilibrium properties of the simulated material will have the format: 
+    *** complete this later*** 
+    
+Reduced units for length, energy, mass, temperature and time will be used.
+These (labelled with an asterisk) are given by:
+    r* = r/sigma    E* = E/epsilon    m* = 1    T* = epsilon/k_B    t* = sigma * sqrt(m/epsilon)
+where sigma is the hard sphere diameter, epsilon is the depth of the potential well,
+and k_B is the Boltzmann constant. 
+
+Author: Damaris Tan and Rachel Honeysett
+Student number: s1645055 and s1711116
+Version: 20/02/20
 """
 
 import sys
 import numpy as np
 import matplotlib.pyplot as pyplot
 from Particle3D import Particle3D
+from pbc import image_in_cube
+from pbc import image_closest_to_particle
+from MDUtilities import set_initial_positions
+from MDutilities import set_initial_velocities
 
 def force_lj(particle1, particle2):
     """
     Method to return the force on particle 1 due to the interaction with particle 2 in a LJ potential.
     Force is given by:
-    F1(r1, r2) = 48((1/r12^14)-(1/(2*r12^8)))(r1-r2)
+    F1(r1, r2) = 48[1/(r12^14)-1/(2*r12^8)](r1-r2)
 
     :param particle1: Particle3D instance
     :param particle2: Particle3D instance
@@ -67,7 +86,7 @@ def force_lj(particle1, particle2):
 def pot_energy_lj(particle1, particle2):
     """
     Method to return potential energy of two particles interacting via the LJ potential.
-    U(r1, r2) = 4 * (1/(r12^12) - 1/(r^6))
+    U(r1, r2) = 4[1/(r12^12) - 1/(r12^6)]
 
     :param particle1: Particle3D instance
     :param particle2: Particle3D instance
@@ -83,42 +102,66 @@ def pot_energy_lj(particle1, particle2):
 
 # Begin main code
 def main():
-    # Read name of output files from command line 
-    # output files are for: 1) time and relative separation  2) time and total energy 
+    # Read name of input and output files from command line 
+    # input file is for input parameters specific to the system being described
+    # output file is the trajectory file, to be visualised using VMD
     # If the wrong number of arguments are given, tell user the format which should be used in command line
     if len(sys.argv)!=3:
         print("Wrong number of arguments.")
         print("Usage: " + sys.argv[0] + " <output file 1>" + "<output file 2>")
         quit()
     else:
-        energy_file_name = sys.argv[1]
-        separation_file_name = sys.argv[2]
+        input_file_name = sys.argv[1]
+        output_file_name = sys.argv[2]
 
-    # Open output file
-    energy_file = open(energy_file_name, "w")
-    separation_file = open(separation_file_name, "w")
+    # Open input and output files
+    input_file = open(input_file_name, "r")
+    output_file = open(output_file_name, "w")
 
+    # Read in particle properties, initial conditions from file. File should have format:
+    # <no. particles> <no. steps> <timestep> <temp> <density> <LJ cut-off> 
+    line = input_file.readline()
+    tokens = line.split(" ")
+    # assign variables to the properties/initial conditions
+    num_particles = int(tokens[0])
+    numstep = int(tokens[1])
+    dt = float(tokens[2])          # timestep
+    temp = float(tokens[3])
+    rho = float(tokens[4])         # density
+    lj_cutoff = float(tokens[5])
+    input_file.close()             # close the input file
+    
+    
+    # Create a list of Particle3D objects, with arbitrary positions and velocities. 
+    # Will use the arbitrary position (1, 0, 0) and velocity (1, 0, 0)
+    # The list should have length equal to the user-defined number of particles, num_particles.
+    particles = []
+    arbitrary_position = np.array([1,0,0])
+    arbitrary_velocity = np.array([1,0,0])
+    for i in range (0, num_particles):
+        name = "particle" + str(i+1)       # create systematic name for each particle
+        particles.append(Particle3D(name, arbitrary_position, arbitrary_velocity))
+    
+    # Apply the set_initial_positions()and set_initial_velocities() functions to the 'particles' array
+    set_initial_positions(rho, particles)
+    set_initial_velocities(temp, particles)
+    
+    # Print the number of particles and a header line to the trajectory file traj.xyz. 
+    # Print the initial positions of all the particles in the list 'particles' to the trajectory file.
+    output_file.write(str(num_particles) + "\n")
+    output_file.write("timestep = 1" +"\n")
+    for i in range (0, num_particles):
+        output_file.write(str(particles[i]) + "\n")
+    
+    
+    
+   # *** Everything below this is old code, still needs to be changed ***
+    
     # Set up simulation parameters
     dt = 0.01
     numstep = int(2000) # must be an integer as this is used as the range in a for loop
     time = 0.0
     
-    # Read in particle properties, initial conditions from file. File should have format:
-    # <label> <x pos> <y pos> <z pos> <x vel> <y vel> <z vel> <mass> 
-    file_handle = open("oxygenInitialConditions.dat", "r")
-    # file_handle.readline()
-    p1 = Particle3D.from_file(file_handle)   
-    p2 = Particle3D.from_file(file_handle)
-    
-    # Read in parameters for oxygen/nitrogen. File should have format:
-    # <D_e> <r_e> <alpha>
-    filein = open("oxygenParameters.dat", "r")  
-    line = filein.readline()
-    tokens = line.split(",")
-    D_e = float(tokens[0])
-    r_e = float(tokens[1])
-    alpha = float(tokens[2])
-    filein.close()
     
     #initial relative separation:
     r12 = Particle3D.particle_separation(p1, p2)
@@ -199,3 +242,4 @@ def main():
 # Execute main method, but only when directly invoked
 if __name__ == "__main__":
     main()
+
