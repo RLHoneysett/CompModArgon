@@ -1,53 +1,72 @@
+# -*- coding: utf-8 -*-
 """
-CMod Ex2: 3D velocity Verlet time integration of a two particles interacting via 
-the Morse Potential.
+CMod Project B: 3D velocity Verlet time integration of N particles interacting via 
+the Lennard-Jones (LJ) Potential.
 
-Produces plots of the relative positions of the particles and the total energy, 
-both as function of time. Also saves these to two separate files: 
-    1) time and total energy
-    2) time and particle separation
+Produces a trajectory file, with which the particles’trajectories can be visualised 
+using a molecular visualisation program, VMD (Visual Molecular Dynamics).
+Writes the following to a file at regular time intervals:
+    1) the system’s total, kinetic and potential energies. 
+    2) the particles’ mean square displacement (MSD).
+    3) the particles’ radial distribution function (RDF). This will also be visualised as a histogram.
     
-The potential energy of the two particles in the potential is:
-    U(r1, r2) = D_e {(1 - exp[-alpha(r12 - r_e)])^2 - 1}
+The potential energy of the two particles in the LJ potential is:
+    U(r1, r2) = 4[1/(r12^12) - 1/(r12^6)]
 where:
-    * r1 and r2 are the positions of the two particles (vectors)
     * r12 = abs(r2 - r1) (scalar)
-    * r_e is the equilibrium bond distance (scalar)
-    * D_e is the well depth (scalar)
-    * alpha is a parameter related to the force constant and D_e (scalar). 
-      Describes the curvature of the potential minimum.
+    * r1 and r2 are the positions of the two particles (vectors)
       
 The force on particle 1 (vector) is:
-    F1(r1, r2) = 2 * alpha * D_e {1 - exp [-apha(r12 - r_e)]} * exp[-alpha(r12 - r_e)] * (r1-r2)/r12
+    F1(r1, r2) = 48[1/(r12^14)-1/(2*r12^8)](r1-r2)
 The force on particle 2 (vector) is:
     F2(r1, r2) = -F1(r1, r2)
     
-The initial conditions for the particles are read from a user-defined input file of the format: 
-    <label> <x pos> <y pos> <z pos> <x vel> <y vel> <z vel> <mass> 
+The program will require an input file. This will contain the following, where relevant in
+reduced units:
+    * number of particles
+    * number of simulation steps
+    * timestep
+    * temperature
+    * particle density
+    * LJ cut-off distance
+The format will be:
+    <no. particles> <no. steps> <timestep> <temp> <density> <LJ cut-off> 
     
-The parameters of the Morse Potential specific to a particlular element are read from a user-defined
-file of the format:    
-    <D_e> <r_e> <alpha>
+The output trajectory file will have the format:
     
-The units used will be eV, angstroms and a.m.u for energy, length and mass respectively.
-The methods for calculating the force and potential take the the parameters 
-r_e, D_e and alpha as arguments.
+<number of points to plot>
+<title line (in the example below it will give the timestep number)>
+<particle label> <x coordinate> <y-coordinate> <z coordinate>
+The final line is repeated N times for N particles. 
 
-Author: Damaris Tan
-Student number: s1645055
-Version: 16/11/19
+The ouput files containing the equilibrium properties of the simulated material will have the format: 
+    *** complete this later*** 
+    
+Reduced units for length, energy, mass, temperature and time will be used.
+These (labelled with an asterisk) are given by:
+    r* = r/sigma    E* = E/epsilon    m* = 1    T* = epsilon/k_B    t* = sigma * sqrt(m/epsilon)
+where sigma is the hard sphere diameter, epsilon is the depth of the potential well,
+and k_B is the Boltzmann constant. 
+
+Author: Damaris Tan and Rachel Honeysett
+Student number: s1645055 and s1711116
+Version: 20/02/20
 """
 
 import sys
 import numpy as np
 import matplotlib.pyplot as pyplot
 from Particle3D import Particle3D
+from pbc import image_in_cube
+from pbc import image_closest_to_particle
+from MDUtilities import set_initial_positions
+from MDUtilities import set_initial_velocities
 
 def force_lj(particle1, particle2):
     """
     Method to return the force on particle 1 due to the interaction with particle 2 in a LJ potential.
     Force is given by:
-    F1(r1, r2) = 48((1/r12^14)-(1/(2*r12^8)))(r1-r2)
+    F1(r1, r2) = 48[1/(r12^14)-1/(2*r12^8)](r1-r2)
 
     :param particle1: Particle3D instance
     :param particle2: Particle3D instance
@@ -67,7 +86,7 @@ def force_lj(particle1, particle2):
 def pot_energy_lj(particle1, particle2):
     """
     Method to return potential energy of two particles interacting via the LJ potential.
-    U(r1, r2) = 4 * (1/(r12^12) - 1/(r^6))
+    U(r1, r2) = 4[1/(r12^12) - 1/(r12^6)]
 
     :param particle1: Particle3D instance
     :param particle2: Particle3D instance
@@ -79,123 +98,144 @@ def pot_energy_lj(particle1, particle2):
     potential = 4 * (1/(r12**12) - 1/(r12**6))
     
     return potential
-
+    
+    
+def total_force(particle, particles, num_particles, lj_cutoff, rho):
+    """
+    Method to compute the total force on one particle, due to all the other particles.
+    Remembering to use the image closest to the particle in question! 
+    ***Not sure if this will work!***
+    
+    :param particle: Particle3D instance - the particle in question
+    :param particles: list of all the Particle3D instances in simulation box
+    :num_particles: the number of particles in the simulation box
+    :lj_cutoff: the LJ cut-off distance - the force of particles beyond this distance 
+                from the particle in question will be considered negligible. 
+    :return: the total force on the particle in question. 
+    """ 
+    total_force = np.array([0,0,0])
+    
+    for i in range (0, num_particles):
+        # Find image closest to the particle in question
+        box_size = (num_particles/rho)**(1./3.)
+        closest_image = image_closest_to_particle(particle, particles[i], box_size)
+        
+        # Calculate distance between particle in question and the next particle in the simulation box
+        r12 = Particle3D.particle_separation(particle, closest_image)
+        
+        # If the distance between the particles is zero (ie you have two of the same particle)
+        # move on to the next particle
+        if r12 == 0:
+            continue
+            
+        # If distance between the particles is greater than the LJ-cutoff distance
+        # move on to the next particle.
+        elif r12 > lj_cutoff:
+            continue
+            
+        # If r12 is less than the LJ-cutoff distance, add the force due to this particle
+        # to the total force on the particle in question.
+        else:
+            total_force = total_force + force_lj(particle, closest_image)
+    
+    return total_force
 
 # Begin main code
 def main():
-    # Read name of output files from command line 
-    # output files are for: 1) time and relative separation  2) time and total energy 
+    # Read name of input and output files from command line 
+    # input file is for input parameters specific to the system being described
+    # output file is the trajectory file, to be visualised using VMD
     # If the wrong number of arguments are given, tell user the format which should be used in command line
     if len(sys.argv)!=3:
         print("Wrong number of arguments.")
         print("Usage: " + sys.argv[0] + " <output file 1>" + "<output file 2>")
         quit()
     else:
-        energy_file_name = sys.argv[1]
-        separation_file_name = sys.argv[2]
+        input_file_name = sys.argv[1]
+        output_file_name = sys.argv[2]
 
-    # Open output file
-    energy_file = open(energy_file_name, "w")
-    separation_file = open(separation_file_name, "w")
+    # Open input and output files
+    input_file = open(input_file_name, "r")
+    output_file = open(output_file_name, "w")
 
-    # Set up simulation parameters
-    dt = 0.01
-    numstep = int(2000) # must be an integer as this is used as the range in a for loop
-    time = 0.0
-    
     # Read in particle properties, initial conditions from file. File should have format:
-    # <label> <x pos> <y pos> <z pos> <x vel> <y vel> <z vel> <mass> 
-    file_handle = open("oxygenInitialConditions.dat", "r")
-    # file_handle.readline()
-    p1 = Particle3D.from_file(file_handle)   
-    p2 = Particle3D.from_file(file_handle)
+    # <no. particles> <no. steps> <timestep> <temp> <density> <LJ cut-off> 
+    line = input_file.readline()
+    tokens = line.split(" ")
+    # assign variables to the properties/initial conditions
+    num_particles = int(tokens[0])
+    numstep = int(tokens[1])
+    dt = float(tokens[2])          # timestep
+    temp = float(tokens[3])
+    rho = float(tokens[4])         # density
+    lj_cutoff = float(tokens[5])
+    input_file.close()             # close the input file
     
-    # Read in parameters for oxygen/nitrogen. File should have format:
-    # <D_e> <r_e> <alpha>
-    filein = open("oxygenParameters.dat", "r")  
-    line = filein.readline()
-    tokens = line.split(",")
-    D_e = float(tokens[0])
-    r_e = float(tokens[1])
-    alpha = float(tokens[2])
-    filein.close()
+    # create variable for the box size, using the same box size as in MDUtilities.py module
+    box_size = (num_particles/rho)**(1./3.)
     
-    #initial relative separation:
-    r12 = Particle3D.particle_separation(p1, p2)
     
-    # The units of energy, length and mass are in eV, angstroms and a.m.u respectively. 
-    # The units of time are [length]*([mass]/[energy])^(1/2)
-    # So to convert to femto-seconds, need to multiply all time values by (10**-10 m)*[(1 a.m.u. in kg)/(1 eV in joules)]^(1/2) / 10^-15
-    # CODATA conversions are used
-    time_unit = 10**-10 * (1.66053906660*10**-27)**0.5 * (1.602176634*10**-19)**-0.5 * 10**15
-
-    # Write out initial conditions
-    # Write out energy and separation to 8 decimal places. Add space before energy/separation for clarity
-    energy = p1.kinetic_energy()+ p2.kinetic_energy() + pot_energy_morse(p1, p2, r_e, D_e, alpha)   
-    energy_file.write("{0:f} {1:12.8f}\n".format(time*time_unit, energy))
-    separation_file.write("{0:f} {1:12.8f}\n".format(time*time_unit, r12))
-
-    # Get initial force
-    force1 = force_morse(p1, p2, r_e, D_e, alpha)
-
-    # Initialise data lists for plotting later
-    time_list = [time*time_unit]
-    r12_list = [r12]  #relative separation list
-    energy_list = [energy]
-
+    # Create a list of Particle3D objects, with arbitrary positions and velocities. 
+    # Will use the arbitrary position (1, 0, 0) and velocity (1, 0, 0)
+    # The list should have length equal to the user-defined number of particles, num_particles.
+    particles = []
+    arbitrary_position = np.array([1,0,0])
+    arbitrary_velocity = np.array([1,0,0])
+    for i in range (0, num_particles):
+        name = "particle" + str(i+1)       # create systematic name for each particle
+        particles.append(Particle3D(name, arbitrary_position, arbitrary_velocity))
+    
+    # Apply the set_initial_positions()and set_initial_velocities() functions to the 'particles' array
+    set_initial_positions(rho, particles)
+    set_initial_velocities(temp, particles)
+    
+    # Print the number of particles and a header line to the trajectory file traj.xyz. 
+    # Print the initial positions of all the particles in the list 'particles' to the trajectory file.
+    output_file.write(str(num_particles) + "\n")
+    output_file.write("timestep = 0" +"\n")
+    for i in range (0, num_particles):
+        output_file.write(str(particles[i]) + "\n")
+    
+    
+    # create list holding the total force on each particle 
+    forces1 = []
+    for i in range (0, num_particles):
+        force = total_force(particles[i], particles, num_particles, lj_cutoff, rho)
+        forces1.append(force)    
+    
     # Start the time integration loop
     for i in range(numstep):
-        # Update particle position and separation
-        p1.leap_pos2nd(dt, force1)
-        p2.leap_pos2nd(dt, -force1)
-        #update relative position
-        r12 = Particle3D.particle_separation(p1, p2)
+        # For each particle in list 'particles', use the corresponding froce in list 'forces1' to update the particle's position
+        for j in range (0, num_particles):
+            particles[j].leap_pos2nd(dt, forces1[j])
+            
+            # make sure all particles remain in the cube
+            image_in_cube(particles[j], box_size)
         
-        # Update force
-        force1_new = force_morse(p1, p2, r_e, D_e, alpha)
-        # Update particle velocity by averaging
-        # current and new forces
-        p1.leap_velocity(dt, 0.5*(force1+force1_new))
-        p2.leap_velocity(dt, 0.5*(-force1-force1_new))
+        # update the list of forces, using the new positions
+        forces1_new = []
+        for j in range (0, num_particles):
+            force_new = total_force(particles[j], particles, num_particles, lj_cutoff, rho)
+            forces1_new.append(force_new)
+            
+        # Update particle velocity by averaging current and new forces
+        for j in range (0, num_particles):
+            particles[j].leap_velocity(dt, 0.5*(forces1[j]+forces1_new[j]))
+            
+        # Re-define force values
+        forces1 = forces1_new
         
-        
-        # Re-define force value
-        force1 = force1_new
-
-        # Increase time
-        time += dt
-        
-        # Output particle information
-        energy = p1.kinetic_energy() + p2.kinetic_energy() + pot_energy_morse(p1, p2, r_e, D_e, alpha)
-        energy_file.write("{0:f} {1:12.8f}\n".format(time*time_unit, energy))
-        separation_file.write("{0:f} {1:12.8f}\n".format(time*time_unit, r12))
-
-        # Append information to data lists
-        time_list.append(time*time_unit)
-        r12_list.append(r12)
-        energy_list.append(energy)
-
-
+        # write new positions to trajectory file - once this is working, reduce the number of times we print this to the file - maybe for every kth step
+        output_file.write(str(num_particles) + "\n")
+        output_file.write("timestep = " + str(i+1) + "\n")
+        for j in range (0, num_particles):
+            output_file.write(str(particles[j]) + "\n")
+    
     # Post-simulation:
     # Close output file
-    energy_file.close()
-    separation_file.close()
-
-    # Plot particle trajectory to screen
-    pyplot.title('Velocity Verlet: Relative Position vs time')
-    pyplot.xlabel('Time (fs)')     
-    pyplot.ylabel('Relative position (angstroms)')
-    pyplot.plot(time_list, r12_list)
-    pyplot.show()
-
-    # Plot particle energy to screen
-    pyplot.title('Velocity Verlet: total energy vs time')
-    pyplot.xlabel('Time (fs)')     
-    pyplot.ylabel('Energy (eV)')
-    pyplot.plot(time_list, energy_list)
-    pyplot.show()
-
+    output_file.close()
 
 # Execute main method, but only when directly invoked
 if __name__ == "__main__":
     main()
+
