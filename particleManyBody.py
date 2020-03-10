@@ -2,7 +2,6 @@
 """
 CMod Project B: 3D velocity Verlet time integration of N particles interacting via 
 the Lennard-Jones (LJ) Potential.
-
 Produces a trajectory file, with which the particles’trajectories can be visualised 
 using a molecular visualisation program, VMD (Visual Molecular Dynamics).
 Writes the following to a file at regular time intervals:
@@ -39,7 +38,6 @@ The output trajectory file will have the format:
 <title line (the timestep number)>
 <particle label> <x coordinate> <y-coordinate> <z coordinate>
 The final line is repeated N times for N particles. 
-
 The ouput files containing the equilibrium properties of the simulated material will have the format: 
     *** complete this later*** 
     
@@ -48,7 +46,6 @@ These (labelled with an asterisk) are given by:
     r* = r/sigma    E* = E/epsilon    m* = 1    T* = epsilon/k_B    t* = sigma * sqrt(m/epsilon)
 where sigma is the hard sphere diameter, epsilon is the depth of the potential well,
 and k_B is the Boltzmann constant. 
-
 Author: Damaris Tan and Rachel Honeysett
 Student number: s1645055 and s1711116
 Version: 20/02/20
@@ -63,24 +60,26 @@ from pbc import image_closest_to_particle
 from MDUtilities import set_initial_positions
 from MDUtilities import set_initial_velocities
 
-def force_lj(particle1, particle2):
+def force_lj(particle1, particle2, box_size, lj_cutoff):
     """
     Method to return the force on particle 1 due to the interaction with particle 2 in a LJ potential.
     Force is given by:
     F1(r1, r2) = 48[1/(r12^14)-1/(2*r12^8)](r1-r2)
-
     :param particle1: Particle3D instance
     :param particle2: Particle3D instance
     :return: force acting on particle 1 as NumPy array
     """
     # compute particle separation
-    r12 = Particle3D.particle_separation(particle1, particle2)
+    direction = -image_closest_to_particle(particle1, particle2, box_size)
+    r12 = np.linalg.norm(direction)
     # compute normalised direction vector pointing along axis of molecule - this is the direction in which the force acts
-    direction = (1/r12)*(particle2.position - particle1.position)
+    #direction = (particle2.position - particle1.position)
     
-    # compute the magnitude of the force and multiply by the normalised direction vector
-    force = 48 * (1/(r12**14)-1/(2*r12**8)) * direction
-    
+    force = np.zeros(3)
+    if 0 < r12 < lj_cutoff:
+        # compute the magnitude of the force and multiply by the normalised direction vector
+        force = 48 * (1/(r12**14)-1/(2*r12**8)) * direction
+
     return force
 
 
@@ -88,21 +87,21 @@ def pot_energy_lj(particle1, particle2, box_size):
     """
     Method to return potential energy of two particles interacting via the LJ potential.
     U(r1, r2) = 4[1/(r12^12) - 1/(r12^6)]
-
     :param particle1: Particle3D instance
     :param particle2: Particle3D instance
     :return: potential energy of the particles as float
     """
     # compute the particle separation, using minimum image convention
-    particle_2_image = image_closest_to_particle(particle1, particle2, box_size)
-    r12 = Particle3D.particle_separation(particle1, particle_2_image)
+    r12 = np.linalg.norm( image_closest_to_particle(particle1, particle2, box_size) )
+    # lecturer is evil
+    # r12 = Particle3D.particle_separation(particle1, particle_2_image)
     # Use this in formula for potential
     potential = 4 * (1/(r12**12) - 1/(r12**6))
     
     return potential
     
     
-def total_force(particle, particles, num_particles, lj_cutoff, rho):
+def total_force(particle, particles, num_particles, lj_cutoff, box_size):
     """
     Method to compute the total force on one particle, due to all the other particles.
     Remembering to use the image closest to the particle in question! 
@@ -115,11 +114,13 @@ def total_force(particle, particles, num_particles, lj_cutoff, rho):
                 from the particle in question will be considered negligible. 
     :return: the total force on the particle in question. 
     """ 
-    total_force = np.array([0,0,0])
+    my_force = np.zeros(3)
     
-    for i in range (0, num_particles):
+    for i in range ( num_particles):
+        """
+        Lecturer is hash-happy
         # Find image closest to the particle in question
-        box_size = (num_particles/rho)**(1./3.)
+        # box_size = (num_particles/rho)**(1./3.)
         closest_image = image_closest_to_particle(particle, particles[i], box_size)
         
         # Calculate distance between particle in question and the next particle in the simulation box
@@ -138,9 +139,10 @@ def total_force(particle, particles, num_particles, lj_cutoff, rho):
         # If r12 is less than the LJ-cutoff distance, add the force due to this particle
         # to the total force on the particle in question.
         else:
-            total_force = total_force + force_lj(particle, closest_image)
-    
-    return total_force
+            total_force = total_force + force_lj(particle, closest_image, box_size, lj_cutoff)
+        """
+        my_force += force_lj(particle, particles[i], box_size, lj_cutoff)
+    return my_force
 
 # Begin main code
 def main():
@@ -150,7 +152,7 @@ def main():
     # If the wrong number of arguments are given, tell user the format which should be used in command line
     if len(sys.argv)!=3:
         print("Wrong number of arguments.")
-        print("Usage: " + sys.argv[0] + " <output file 1>" + "<output file 2>")
+        print("Usage: " + sys.argv[0] + " <input file>" + "<output file>")
         quit()
     else:
         input_file_name = sys.argv[1]
@@ -182,8 +184,8 @@ def main():
     # Will use the arbitrary position (1, 0, 0) and velocity (1, 0, 0)
     # The list should have length equal to the user-defined number of particles, num_particles.
     particles = []
-    arbitrary_position = np.array([1,0,0])
-    arbitrary_velocity = np.array([1,0,0])
+    arbitrary_position = np.array([1,0,0],float)
+    arbitrary_velocity = np.array([1,0,0],float)
     for i in range (0, num_particles):
         name = "particle" + str(i+1)       # create systematic name for each particle
         particles.append(Particle3D(name, arbitrary_position, arbitrary_velocity))
@@ -203,7 +205,7 @@ def main():
     # create list holding the total force on each particle 
     forces1 = []
     for i in range (0, num_particles):
-        force = total_force(particles[i], particles, num_particles, lj_cutoff, rho)
+        force = total_force(particles[i], particles, num_particles, lj_cutoff, box_size)
         forces1.append(force)    
         
     # open a file to which the energy values of the system will be written to. This will be of the format: 
@@ -238,7 +240,7 @@ def main():
         # update the list of forces, using the new positions
         forces1_new = []
         for j in range (0, num_particles):
-            force_new = total_force(particles[j], particles, num_particles, lj_cutoff, rho)
+            force_new = total_force(particles[j], particles, num_particles, lj_cutoff, box_size)
             forces1_new.append(force_new)
             
         # Update particle velocity by averaging current and new forces
@@ -295,6 +297,3 @@ def main():
 # Execute main method, but only when directly invoked
 if __name__ == "__main__":
     main()
-
-
-
