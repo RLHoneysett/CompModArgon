@@ -37,6 +37,6 @@ def image_closest_to_particle(particle1, particle2, l):
     # The most efficient method: add on l/2 before using the modulo operator
     # Correct for this by subtracting l/2 after:
     image_coords = np.mod((particle2.position - particle1.position)+l/2, l) - l/2
-    image = Particle3D("image", image_coords, particle2.velocity)
+    #image = Particle3D("image", image_coords, particle2.velocity)
     
-    return image
+    return image_coords
