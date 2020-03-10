@@ -29,13 +29,14 @@ reduced units:
     * temperature
     * particle density
     * LJ cut-off distance
+    * interval ( in terms of timesteps) at which the positions of the particles will be printed to the trajectory file
 The format will be:
-    <no. particles> <no. steps> <timestep> <temp> <density> <LJ cut-off> 
+    <no. particles> <no. steps> <timestep> <temp> <density> <LJ cut-off> <print interval>
     
 The output trajectory file will have the format:
     
 <number of points to plot>
-<title line (in the example below it will give the timestep number)>
+<title line (the timestep number)>
 <particle label> <x coordinate> <y-coordinate> <z coordinate>
 The final line is repeated N times for N particles. 
 
@@ -83,7 +84,7 @@ def force_lj(particle1, particle2):
     return force
 
 
-def pot_energy_lj(particle1, particle2):
+def pot_energy_lj(particle1, particle2, box_size):
     """
     Method to return potential energy of two particles interacting via the LJ potential.
     U(r1, r2) = 4[1/(r12^12) - 1/(r12^6)]
@@ -92,8 +93,9 @@ def pot_energy_lj(particle1, particle2):
     :param particle2: Particle3D instance
     :return: potential energy of the particles as float
     """
-    # compute the particle separation
-    r12 = Particle3D.particle_separation(particle1, particle2)
+    # compute the particle separation, using minimum image convention
+    particle_2_image = image_closest_to_particle(particle1, particle2, box_size)
+    r12 = Particle3D.particle_separation(particle1, particle_2_image)
     # Use this in formula for potential
     potential = 4 * (1/(r12**12) - 1/(r12**6))
     
@@ -159,7 +161,7 @@ def main():
     output_file = open(output_file_name, "w")
 
     # Read in particle properties, initial conditions from file. File should have format:
-    # <no. particles> <no. steps> <timestep> <temp> <density> <LJ cut-off> 
+    # <no. particles> <no. steps> <timestep> <temp> <density> <LJ cut-off> <print interval>
     line = input_file.readline()
     tokens = line.split(" ")
     # assign variables to the properties/initial conditions
@@ -169,6 +171,7 @@ def main():
     temp = float(tokens[3])
     rho = float(tokens[4])         # density
     lj_cutoff = float(tokens[5])
+    print_int = int(tokens[6])     # interval (in terms of timesteps) over which the positions of the particles will be printed to the trajectory file
     input_file.close()             # close the input file
     
     # create variable for the box size, using the same box size as in MDUtilities.py module
@@ -202,9 +205,29 @@ def main():
     for i in range (0, num_particles):
         force = total_force(particles[i], particles, num_particles, lj_cutoff, rho)
         forces1.append(force)    
+        
+    # open a file to which the energy values of the system will be written to. This will be of the format: 
+    # <time> <KE> <PE> <Total Energy>
+    #energy_file = open("energy.dat", "w")
+    # create lists for energyies
+    kinetic_list = []
+    potential_list = []
+    total_list = []
+    time_list = []
+    
+    # Set time and energies to zero
+    time = 0.
     
     # Start the time integration loop
     for i in range(numstep):
+        
+        # Increase time by one timestep
+        time += dt
+        
+        # Set energies to zero
+        kin_energy = 0
+        pot_energy = 0
+        
         # For each particle in list 'particles', use the corresponding froce in list 'forces1' to update the particle's position
         for j in range (0, num_particles):
             particles[j].leap_pos2nd(dt, forces1[j])
@@ -225,11 +248,45 @@ def main():
         # Re-define force values
         forces1 = forces1_new
         
-        # write new positions to trajectory file - once this is working, reduce the number of times we print this to the file - maybe for every kth step
-        output_file.write(str(num_particles) + "\n")
-        output_file.write("timestep = " + str(i+1) + "\n")
+        # add up kinetic and potential energy of the system: 
         for j in range (0, num_particles):
-            output_file.write(str(particles[j]) + "\n")
+            kin_energy += particles[j].kinetic_energy()
+            for l in range (0, num_particles):
+                if j==l:
+                    continue      # Avoid calculating potential between identical particles
+                else:
+                    individual_potential = 0.5 * pot_energy_lj(particles[j], particles[l], box_size)  # calculate individual potential energy between each particle pair. 
+                                                                                            # Then divide by 2 to avoid double counting.
+                    pot_energy += individual_potential
+        # add KE and PE for total energy
+        total_energy = kin_energy + pot_energy
+            
+        #append energies to lists
+        kinetic_list.append(kin_energy)
+        potential_list.append(pot_energy)
+        total_list.append(total_energy)
+        time_list.append(time)    
+        
+        # write new positions to trajectory file, for every nth timestep (named print_int) using the modulo function
+        # At each nth timestep, write the energies to the file energy.dat, in format given above. 
+        if (i+1)%print_int == 0:                                 # print to trajectory file if timestep is a multiple of print_int
+            output_file.write(str(num_particles) + "\n")
+            output_file.write("timestep = " + str(i+1) + "\n")
+            for j in range (0, num_particles):
+                output_file.write(str(particles[j]) + "\n")
+            
+        else:
+            continue                                        # don't print to traj file if timestep is a multiple of print_int
+        
+        
+        
+    
+    # Plot system energy to screen
+    pyplot.title('energy vs time')
+    pyplot.xlabel('Time (t*)')     
+    pyplot.ylabel('Energy (E*)')
+    pyplot.plot(time_list, kinetic_list)
+    pyplot.show()
     
     # Post-simulation:
     # Close output file
@@ -238,4 +295,6 @@ def main():
 # Execute main method, but only when directly invoked
 if __name__ == "__main__":
     main()
+
+
 
