@@ -6,8 +6,11 @@ Produces a trajectory file, with which the particles’trajectories can be visua
 using a molecular visualisation program, VMD (Visual Molecular Dynamics).
 Writes the following to a file at regular time intervals:
     1) the system’s total, kinetic and potential energies. 
+       The file will be called energy.dat, and will have the format: <time> <KE> <PE> <Total Energy>
+       The energies will also be plotted on a graph.
     2) the particles’ mean square displacement (MSD).
     3) the particles’ radial distribution function (RDF). This will also be visualised as a histogram.
+Note that the units used will be reduced units. These are explained below.
     
 The potential energy of the two particles in the LJ potential is:
     U(r1, r2) = 4[1/(r12^12) - 1/(r12^6)]
@@ -38,6 +41,7 @@ The output trajectory file will have the format:
 <title line (the timestep number)>
 <particle label> <x coordinate> <y-coordinate> <z coordinate>
 The final line is repeated N times for N particles. 
+
 The ouput files containing the equilibrium properties of the simulated material will have the format: 
     *** complete this later*** 
     
@@ -46,6 +50,7 @@ These (labelled with an asterisk) are given by:
     r* = r/sigma    E* = E/epsilon    m* = 1    T* = epsilon/k_B    t* = sigma * sqrt(m/epsilon)
 where sigma is the hard sphere diameter, epsilon is the depth of the potential well,
 and k_B is the Boltzmann constant. 
+
 Author: Damaris Tan and Rachel Honeysett
 Student number: s1645055 and s1711116
 Version: 20/02/20
@@ -67,17 +72,18 @@ def force_lj(particle1, particle2, box_size, lj_cutoff):
     F1(r1, r2) = 48[1/(r12^14)-1/(2*r12^8)](r1-r2)
     :param particle1: Particle3D instance
     :param particle2: Particle3D instance
-    :return: force acting on particle 1 as NumPy array
+    :return: force acting on particle 1 as NumPy array, taking into account minimum image convention.
     """
-    # compute particle separation
+    # compute particle separation, using minimum image convention.
     direction = -image_closest_to_particle(particle1, particle2, box_size)
+    # compute the magnitude of this
     r12 = np.linalg.norm(direction)
-    # compute normalised direction vector pointing along axis of molecule - this is the direction in which the force acts
-    #direction = (particle2.position - particle1.position)
     
+    # set force to zero
     force = np.zeros(3)
+    # if the distance between particle1 and particle2 is less than the LJ cutoff distance, 
+    # compute the force and add it to the force vector.
     if 0 < r12 < lj_cutoff:
-        # compute the magnitude of the force and multiply by the normalised direction vector
         force = 48 * (1/(r12**14)-1/(2*r12**8)) * direction
 
     return force
@@ -89,12 +95,12 @@ def pot_energy_lj(particle1, particle2, box_size):
     U(r1, r2) = 4[1/(r12^12) - 1/(r12^6)]
     :param particle1: Particle3D instance
     :param particle2: Particle3D instance
-    :return: potential energy of the particles as float
+    :param box_size: length of the simulation box (a cube)
+    :return: potential energy of the particles as float, taking into account minimum image convention
     """
     # compute the particle separation, using minimum image convention
     r12 = np.linalg.norm( image_closest_to_particle(particle1, particle2, box_size) )
-    # lecturer is evil
-    # r12 = Particle3D.particle_separation(particle1, particle_2_image)
+    
     # Use this in formula for potential
     potential = 4 * (1/(r12**12) - 1/(r12**6))
     
@@ -104,44 +110,23 @@ def pot_energy_lj(particle1, particle2, box_size):
 def total_force(particle, particles, num_particles, lj_cutoff, box_size):
     """
     Method to compute the total force on one particle, due to all the other particles.
-    Remembering to use the image closest to the particle in question! 
-    ***Not sure if this will work!***
     
     :param particle: Particle3D instance - the particle in question
     :param particles: list of all the Particle3D instances in simulation box
-    :num_particles: the number of particles in the simulation box
-    :lj_cutoff: the LJ cut-off distance - the force of particles beyond this distance 
-                from the particle in question will be considered negligible. 
-    :return: the total force on the particle in question. 
+    :param num_particles: the number of particles in the simulation box
+    :param lj_cutoff: the LJ cut-off distance - the force of particles beyond this distance 
+                from the particle in question will be considered negligible
+    :param box_size: length of the simulation box (a cube)
+    :return: the total force on the particle in question 
     """ 
+    
+    # start with zero force on the particle
     my_force = np.zeros(3)
     
+    # add on the force between the particle in question, and all the other particles in the box
     for i in range ( num_particles):
-        """
-        Lecturer is hash-happy
-        # Find image closest to the particle in question
-        # box_size = (num_particles/rho)**(1./3.)
-        closest_image = image_closest_to_particle(particle, particles[i], box_size)
-        
-        # Calculate distance between particle in question and the next particle in the simulation box
-        r12 = Particle3D.particle_separation(particle, closest_image)
-        
-        # If the distance between the particles is zero (ie you have two of the same particle)
-        # move on to the next particle
-        if r12 == 0:
-            continue
-            
-        # If distance between the particles is greater than the LJ-cutoff distance
-        # move on to the next particle.
-        elif r12 > lj_cutoff:
-            continue
-            
-        # If r12 is less than the LJ-cutoff distance, add the force due to this particle
-        # to the total force on the particle in question.
-        else:
-            total_force = total_force + force_lj(particle, closest_image, box_size, lj_cutoff)
-        """
         my_force += force_lj(particle, particles[i], box_size, lj_cutoff)
+        
     return my_force
 
 # Begin main code
@@ -194,13 +179,18 @@ def main():
     set_initial_positions(rho, particles)
     set_initial_velocities(temp, particles)
     
+    # create list of initial positions for MSD function
+    initial_pos_list = []
+    for j in range (num_particles):
+        initial_pos_list.append(particles[j].position)
+    
+    
     # Print the number of particles and a header line to the trajectory file traj.xyz. 
     # Print the initial positions of all the particles in the list 'particles' to the trajectory file.
     output_file.write(str(num_particles) + "\n")
     output_file.write("timestep = 0" +"\n")
     for i in range (0, num_particles):
         output_file.write(str(particles[i]) + "\n")
-    
     
     # create list holding the total force on each particle 
     forces1 = []
@@ -210,7 +200,7 @@ def main():
         
     # open a file to which the energy values of the system will be written to. This will be of the format: 
     # <time> <KE> <PE> <Total Energy>
-    #energy_file = open("energy.dat", "w")
+    energy_file = open("energy.dat", "w")
     # create lists for energyies
     kinetic_list = []
     potential_list = []
@@ -230,7 +220,7 @@ def main():
         kin_energy = 0
         pot_energy = 0
         
-        # For each particle in list 'particles', use the corresponding froce in list 'forces1' to update the particle's position
+        # For each particle in list 'particles', use the corresponding force in list 'forces1' to update the particle's position
         for j in range (0, num_particles):
             particles[j].leap_pos2nd(dt, forces1[j])
             
@@ -258,10 +248,14 @@ def main():
                     continue      # Avoid calculating potential between identical particles
                 else:
                     individual_potential = 0.5 * pot_energy_lj(particles[j], particles[l], box_size)  # calculate individual potential energy between each particle pair. 
-                                                                                            # Then divide by 2 to avoid double counting.
+                                                                                                      # Then divide by 2 to avoid double counting.
                     pot_energy += individual_potential
         # add KE and PE for total energy
         total_energy = kin_energy + pot_energy
+        
+        # Write the KE, PE and total energy to the file energy.dat, as well as the time ellapsed.
+        # Everything will be in reduced units.
+        energy_file.write("{0:f} {1:12.8f} {2:12.8f} {3:12.8f}\n".format(time, kin_energy, pot_energy, total_energy))
             
         #append energies to lists
         kinetic_list.append(kin_energy)
@@ -278,20 +272,27 @@ def main():
                 output_file.write(str(particles[j]) + "\n")
             
         else:
-            continue                                        # don't print to traj file if timestep is a multiple of print_int
-        
-        
-        
+            continue  # don't print to traj file if timestep is a multiple of print_int
     
     # Plot system energy to screen
-    pyplot.title('energy vs time')
-    pyplot.xlabel('Time (t*)')     
-    pyplot.ylabel('Energy (E*)')
-    pyplot.plot(time_list, kinetic_list)
+    pyplot.title('Energy vs time')
+    pyplot.xlabel('Time in reduced units (t*)')     
+    pyplot.ylabel('Energy in reduced units (E*)')
+    line1, = pyplot.plot(time_list, kinetic_list, label = 'Kinetic energy', color = 'red')
+    line2, = pyplot.plot(time_list, potential_list, label = 'Potential energy', color = 'blue')
+    line3, = pyplot.plot(time_list, total_list, label = 'Total energy', color = 'black')
+    #create legends to identify lines
+    first_legend=pyplot.legend(handles=[line1], loc='lower left')
+    second_legend=pyplot.legend(handles=[line2], loc='lower center')
+    third_legend=pyplot.legend(handles=[line3], loc='lower right')
+    ax = pyplot.gca().add_artist(first_legend)
+    ax = pyplot.gca().add_artist(second_legend)
+    ax = pyplot.gca().add_artist(third_legend)
     pyplot.show()
     
     # Post-simulation:
-    # Close output file
+    # Close output file and energy.dat file
+    energy_file.close()
     output_file.close()
 
 # Execute main method, but only when directly invoked
