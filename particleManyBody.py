@@ -129,6 +129,21 @@ def total_force(particle, particles, num_particles, lj_cutoff, box_size):
         
     return my_force
 
+#Mean Square Displacement function
+def MSD(particle1, particle2):
+    """
+    Method to find the average MSD over all particles.
+    Uses the equation:
+    MSD(t) = (1/N)*sigma(|ri(t) - ri0|^2)
+
+    :param particles: list of all the Particle3D instances in the simulation box.
+    :param N: the number of particles in the simulation.
+    :return: the sum of the MSDs for all particles, with each other.
+    """
+    SD = (np.linalg.norm(particle1.position - particle2.position))**2  #finds SD
+  
+    return SD
+
 # Begin main code
 def main():
     # Read name of input and output files from command line 
@@ -262,6 +277,19 @@ def main():
         potential_list.append(pot_energy)
         total_list.append(total_energy)
         time_list.append(time)    
+
+        #time integration element for MSD
+        #initialise list of MSD over time
+        MSD_list = []
+        totalMSD = 0                  #initialise the total MSD
+        for i in range (0, num_particles):
+            for j in range (0, num_particles):
+                if i==j:
+                    continue          #ensures the MSD between a particle and itself is not calculated
+                else:
+                    totalMSD += MSD(particles[i], particles[j])/num_particles  #adds the Squared Difference to sum and divides by N to find mean
+                
+        MSD_list.append(totalMSD)
         
         # write new positions to trajectory file, for every nth timestep (named print_int) using the modulo function
         # At each nth timestep, write the energies to the file energy.dat, in format given above. 
@@ -295,6 +323,16 @@ def main():
     energy_file.close()
     output_file.close()
 
+    # Plot system MSD over time
+    pyplot.title('MSD vs time')
+    pyplot.xlabel('Time in reduced units (t*)') 
+    pyplot.ylabel('MSD in reduced units (r*^2)')
+    line, = pyplot.plot(time_list, MSD_list)
+    pyplot.show()
+ 
+
+    #delete this later
+    print(MSD_list)
 # Execute main method, but only when directly invoked
 if __name__ == "__main__":
     main()
