@@ -333,8 +333,6 @@ def main():
     pyplot.show()
 
 
-    #delete this later
-    print(MSD_list)
 # Execute main method, but only when directly invoked
 if __name__ == "__main__":
     main()
