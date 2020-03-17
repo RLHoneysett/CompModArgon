@@ -130,20 +130,36 @@ def total_force(particle, particles, num_particles, lj_cutoff, box_size):
     return my_force
 
 #Mean Square Displacement function
-def MSD(particle1, particle2):
+def MSD(particle1, particle2, box_size):
     """
     Method to find the average MSD over all particles.
     Uses the equation:
     MSD(t) = (1/N)*sigma(|ri(t) - ri0|^2)
 
-    :param particles: list of all the Particle3D instances in the simulation box.
-    :param N: the number of particles in the simulation.
+    :param particle1: a Particle3D instance.
+    :param particle2: another Particle3D instance.
+    :param box_size: length of the simulation box (a cube)
+
     :return: the sum of the MSDs for all particles, with each other.
     """
-    SD = (np.linalg.norm(particle1.position - particle2.position))**2  #finds SD
+    SD = (np.linalg.norm( image_closest_to_particle(particle1, particle2, box_size) ))**2  #finds SD
 
     return SD
 
+
+#collects data for radial distribution function
+
+def RDF_collection(particle1, particle2, box_size):
+    """
+    Method to calculate the radial distribution at a single time period
+    Uses the equation:
+    RDF_collection = sigma (delta |rij -r|)
+
+    :param particle1: a Particle3D instance.
+    :param particle2: another Particle3D instance.
+    """
+    r12 = np.linalg.norm( image_closest_to_particle(particle1, particle2, box_size) )
+    return r12
 # Begin main code
 def main():
     # Read name of input and output files from command line
@@ -225,6 +241,9 @@ def main():
     #initialise list of MSD over time
     MSD_list = []
 
+    #initialise list of RDF over time
+    RDF_list = []
+
     # Set time and energies to zero
     time = 0.
 
@@ -289,10 +308,18 @@ def main():
                 if i==j:
                     continue          #ensures the MSD between a particle and itself is not calculated
                 else:
-                    totalMSD += MSD(particles[i], particles[j])/num_particles  #adds the Squared Difference to sum and divides by N to find mean
+                    totalMSD += MSD(particles[i], particles[j], box_size)/num_particles  #adds the Squared Difference to sum and divides by N to find mean
 
         MSD_list.append(totalMSD)
 
+        #time integration element for RDF
+
+        for i in range (0, num_particles):
+            for j in range (0,  num_particles):
+                if i ==j:
+                    continue          #ensures the the distance between a particle and itself is not calculated
+                else:
+                    RDF_list.append(RDF_collection(particles[i], particles[j], box_size))
         # write new positions to trajectory file, for every nth timestep (named print_int) using the modulo function
         # At each nth timestep, write the energies to the file energy.dat, in format given above.
         if (i+1)%print_int == 0:                                 # print to trajectory file if timestep is a multiple of print_int
@@ -331,7 +358,6 @@ def main():
     pyplot.ylabel('MSD in reduced units (r*^2)')
     line, = pyplot.plot(time_list, MSD_list)
     pyplot.show()
-
 
 # Execute main method, but only when directly invoked
 if __name__ == "__main__":
