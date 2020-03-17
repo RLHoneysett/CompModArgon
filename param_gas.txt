@@ -1,1 +1,2 @@
-2 1000 0.4638 1.544 3.964E-14 3 10
+32 500 0.01 1.58598 0.033963 3 1
+#number of particles   numstep   timestep  temp  rho  lj_cutoff  print_int
