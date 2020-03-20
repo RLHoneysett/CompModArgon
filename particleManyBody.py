@@ -162,14 +162,16 @@ def RDF_collection(particle1, particle2, box_size):
     :return: the distance between two Particles
     """
     r12 = np.linalg.norm( image_closest_to_particle(particle1, particle2, box_size) )
+
     return r12
 
-def RDF_normalisation(rho, num_step, bin_mids):
+def RDF_normalisation(RDF_collection, rho, num_step, bin_mids):
     """
     Method to normalise the radial distribution function
     Uses the Normalisation factor:
     RDF_normal = (1/4pi*rho*dr*num_step*(r^2))*RDF_collection
 
+    :param RDF_collection: an array of the number of items in each bin, unnormalised
     :param rho: the number density
     :param num_step: the number of timesteps in the simulation
     :param bin_mids: a list of the middle of each bin
@@ -180,7 +182,7 @@ def RDF_normalisation(rho, num_step, bin_mids):
     norm_factor = []
     for i in range (0, len(bin_mids)):
         norm_factor.append(4*math.pi*rho*0.01*num_step*(bin_mids[i])**2)
-    return norm_factor
+    return RDF_collection/np.asarray(norm_factor)
 
 # Begin main code
 def main():
@@ -343,12 +345,11 @@ def main():
         values of the bins specified in the "bins" list.  The number of items in each list was then recorded in the list count_for_bins
         and this could be divided by the normalisation factor to give the y values for historgram.
         """
-        for i in range (0, num_particles):
-
-            if i == 1:
+        for k in range (0, num_particles):
+            if k == 1:
                 continue          #ensures distance not calculated for a distance and itself
             else:
-                RDF_list.append(RDF_collection(particles[i], particles[1], box_size))
+                RDF_list.append(RDF_collection(particles[k], particles[1], box_size))
         RDF_rounded = np.around(RDF_list, 2)
         count_for_bins = []
         bins = []       #makes list of all bins used for RDF
@@ -356,7 +357,7 @@ def main():
             bins.append(0.01*j)
         for i in range (0, len(bins)):
             count_for_bins.append(np.count_nonzero(RDF_rounded == bins[i]))
-
+        count_array = np.asarray(count_for_bins)
 
 
 
@@ -371,12 +372,12 @@ def main():
         else:
             continue  # don't print to traj file if timestep is a multiple of print_int
     #testing making a histogram for the RDF_list
-    norm_bins = np.asarray(count_for_bins)/np.asarray(RDF_normalisation(rho, numstep, bins))
+    norm_bins = RDF_normalisation(count_array, rho, numstep, bins)
     #print(len(count_for_bins))
-    print(len(RDF_normalisation(rho, numstep, bins)))
 
-    pyplot.scatter(bins, norm_bins)
-    pyplot.title("Radial distribution function")
+
+    pyplot.plot(bins, norm_bins)
+    pyplot.title("Radial Distribution Function")
     pyplot.ylabel("No. Particles")
     pyplot.xlabel("r*")
     pyplot.show()
