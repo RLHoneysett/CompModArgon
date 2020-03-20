@@ -57,6 +57,7 @@ Version: 20/02/20
 """
 
 import sys
+import math
 import numpy as np
 import matplotlib.pyplot as pyplot
 from Particle3D import Particle3D
@@ -130,19 +131,19 @@ def total_force(particle, particles, num_particles, lj_cutoff, box_size):
     return my_force
 
 #Mean Square Displacement function
-def MSD(particle1, particle2, box_size):
+def MSD(particle1, initial_pos, box_size):
     """
     Method to find the average MSD over all particles.
     Uses the equation:
     MSD(t) = (1/N)*sigma(|ri(t) - ri0|^2)
 
     :param particle1: a Particle3D instance.
-    :param particle2: another Particle3D instance.
+    :param initial_pos: the initial position of particle1
     :param box_size: length of the simulation box (a cube)
 
     :return: the sum of the MSDs for all particles, with each other.
     """
-    SD = (np.linalg.norm( image_closest_to_particle(particle1, particle2, box_size) ))**2  #finds SD
+    SD = (np.linalg.norm( np.mod((initial_pos - particle1.position)+ box_size/2, box_size) - box_size/2))**2  #finds SD
 
     return SD
 
@@ -157,9 +158,32 @@ def RDF_collection(particle1, particle2, box_size):
 
     :param particle1: a Particle3D instance.
     :param particle2: another Particle3D instance.
+
+    :return: the distance between two Particles
     """
     r12 = np.linalg.norm( image_closest_to_particle(particle1, particle2, box_size) )
+
     return r12
+
+def RDF_normalisation(RDF_collection, rho, num_step, bin_mids):
+    """
+    Method to normalise the radial distribution function
+    Uses the Normalisation factor:
+    RDF_normal = (1/4pi*rho*dr*num_step*(r^2))*RDF_collection
+
+    :param RDF_collection: an array of the number of items in each bin, unnormalised
+    :param rho: the number density
+    :param num_step: the number of timesteps in the simulation
+    :param bin_mids: a list of the middle of each bin
+
+    :return: a list of the normalisation factor (to divide by) for
+    each bin in the simulation
+    """
+    norm_factor = []
+    for i in range (0, len(bin_mids)):
+        norm_factor.append(4*math.pi*rho*0.01*num_step*(bin_mids[i])**2)
+    return RDF_collection/np.asarray(norm_factor)
+
 # Begin main code
 def main():
     # Read name of input and output files from command line
@@ -305,21 +329,38 @@ def main():
         totalMSD = 0                  #initialise the total MSD
         for i in range (0, num_particles):
             for j in range (0, num_particles):
-                if i==j:
+                if i != j:
                     continue          #ensures the MSD between a particle and itself is not calculated
                 else:
-                    totalMSD += MSD(particles[i], particles[j], box_size)/num_particles  #adds the Squared Difference to sum and divides by N to find mean
+                    totalMSD += MSD(particles[i], initial_pos_list[j], box_size)/num_particles  #adds the Squared Difference to sum and divides by N to find mean
 
         MSD_list.append(totalMSD)
 
-        #time integration element for RDF
 
-        for i in range (0, num_particles):
-            for j in range (0,  num_particles):
-                if i ==j:
-                    continue          #ensures the the distance between a particle and itself is not calculated
-                else:
-                    RDF_list.append(RDF_collection(particles[i], particles[j], box_size))
+        #time integration element for RDF
+        """
+        so, the plan here is to collect the radial distance of each of the particles from each other, and then
+        round them to the nearest 0.01 (essentially making bins of 0.01 reduced units in length).  Then I made a list of all of the bin
+        boundaries (0.01, 0.02, 0.03... etc.) and counted how many items in the rounded list that there were that matched the
+        values of the bins specified in the "bins" list.  The number of items in each list was then recorded in the list count_for_bins
+        and this could be divided by the normalisation factor to give the y values for historgram.
+        """
+        for k in range (0, num_particles):
+            if k == 1:
+                continue          #ensures distance not calculated for a distance and itself
+            else:
+                RDF_list.append(RDF_collection(particles[k], particles[1], box_size))
+        RDF_rounded = np.around(RDF_list, 2)
+        count_for_bins = []
+        bins = []       #makes list of all bins used for RDF
+        for j in range (0, int(box_size*100)):
+            bins.append(0.01*j)
+        for i in range (0, len(bins)):
+            count_for_bins.append(np.count_nonzero(RDF_rounded == bins[i]))
+        count_array = np.asarray(count_for_bins)
+
+
+
         # write new positions to trajectory file, for every nth timestep (named print_int) using the modulo function
         # At each nth timestep, write the energies to the file energy.dat, in format given above.
         if (i+1)%print_int == 0:                                 # print to trajectory file if timestep is a multiple of print_int
@@ -330,7 +371,16 @@ def main():
 
         else:
             continue  # don't print to traj file if timestep is a multiple of print_int
+    #testing making a histogram for the RDF_list
+    norm_bins = RDF_normalisation(count_array, rho, numstep, bins)
+    #print(len(count_for_bins))
 
+
+    pyplot.plot(bins, norm_bins)
+    pyplot.title("Radial Distribution Function")
+    pyplot.ylabel("No. Particles")
+    pyplot.xlabel("r*")
+    pyplot.show()
     # Plot system energy to screen
     pyplot.title('Energy vs time')
     pyplot.xlabel('Time in reduced units (t*)')
