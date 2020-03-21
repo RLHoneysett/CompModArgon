@@ -15,7 +15,7 @@ stored, and type the "python3 particleManyBody.py" command, followed by the inpu
 for the relevant state of matter, and then the name that is to be given to the output 
 trajectory file produced by the simulation. So for example, if simulating solid argon, enter the following into the terminal:
   <p>
-  <p>     $ python3 particleManyBody param_solid.input traj.xyz     
+  <p>     $ python3 particleManyBody.py param_solid.input traj.xyz     
   <p>
 <p> The trajectory file produced can be visualised using VMD.  Running the code will produce three graphs, the first showing 
 the Radial Distribution Function of the particles, the second showing the Mean Squared 
