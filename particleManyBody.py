@@ -162,7 +162,7 @@ def rdf_collection(particle1, particle2, box_size):
 
     return r12
 
-def rdf_normalisation(rdf_collection, rho, num_collections, bin_mids):
+def rdf_normalisation(rdf_collection, rho, num_collections, num_particles, bin_mids):
     """
     Method to normalise the radial distribution function. 
     The bin width has been hardcoded to be 0.05 (reduced units).
@@ -179,7 +179,8 @@ def rdf_normalisation(rdf_collection, rho, num_collections, bin_mids):
     norm_factor = []
     dr = 0.05     
     for i in range (0, len(bin_mids)):
-        norm_factor.append(4*math.pi*rho*dr*num_collections*(bin_mids[i])**2)
+        # !!!! Need to divide by num_particles/2 to account for the fact that we are counting all pair interactions when collecting RDF data!!!
+        norm_factor.append(4*math.pi*rho*dr*0.5*num_particles*num_collections*(bin_mids[i])**2)
     return rdf_collection/np.asarray(norm_factor)
 
 
@@ -388,8 +389,9 @@ def main():
         count_for_bins.append(np.count_nonzero(np.array(rdf_list) == bins[j]))   # Note: need to turn rdf_list into a numpy array so that we can use np.count_nonzero function
     
     #normalise these bins. 
+    num_collections = numstep//250
     # Set num_collections = 4 because program is hard-coded to collect only at 3 intervals (timesteps 249, 449 and 749, 999)
-    norm_bins = rdf_normalisation(np.array(count_for_bins), rho, 4, bins)
+    norm_bins = rdf_normalisation(np.array(count_for_bins), rho, num_collections, num_particles, bins)
     
     # plot the radial distribution function
     pyplot.plot(bins, norm_bins)
